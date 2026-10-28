@@ -1,58 +1,97 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Angkringan POS
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Aplikasi POS (Point of Sale) berbasis web untuk warung/angkringan dengan manajemen kasir, stok, shift, pengeluaran, dan laporan penjualan.
 
-## About Laravel
+## Tech Stack
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- **Backend**: Laravel 13.38 (PHP ^8.3)
+- **Frontend**: Blade, Tailwind CSS 4 (CSS-first), Vite 8, vanilla JS
+- **Auth/RBAC**: Username auth, peran `owner` dan `cashier`
+- **Database**: MySQL (dev) / SQLite :memory: (testing)
+- **Keuangan**: Menggunakan `App\Support\Money` (brick/math), nilai uang disimpan tanpa float
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Fitur Utama
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+- **POS/Kasir**: Keranjang, metode tunai/QRIS, validasi stok, checkout dalam transaksi DB
+- **Shift Kasir**: Buka/tutup shift, perhitungan kas terduga, rekonsiliasi
+- **Manajemen Produk/Kategori**: CRUD produk, stok terpantau, status aktif
+- **Inventaris**: Pergerakan stok (`inventory_movements`)
+- **Pengeluaran**: Pencatatan pengeluaran kas per shift
+- **Penjualan & Struk**: Daftar penjualan, struk, void/refund (khusus owner)
+- **Laporan**: Omzet, laba kotor/bersih estimasi, trend harian, produk terlaris, stok menipis
+- **Pengaturan & Aktivitas**: Pengaturan toko/QRIS, log aktivitas
 
-## Learning Laravel
+## Persyaratan
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+- PHP >= 8.3
+- Composer
+- Node.js & npm
+- MySQL (untuk pengembangan lokal)
 
-In addition, [Laracasts](https://laracasts.com) contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
-
-You can also watch bite-sized lessons with real-world projects on [Laravel Learn](https://laravel.com/learn), where you will be guided through building a Laravel application from scratch while learning PHP fundamentals.
-
-## Agentic Development
-
-Laravel's predictable structure and conventions make it ideal for AI coding agents like Claude Code, Cursor, and GitHub Copilot. Install [Laravel Boost](https://laravel.com/docs/ai) to supercharge your AI workflow:
+## Setup
 
 ```bash
-composer require laravel/boost --dev
+# Install dependencies, setup env, migrate, build assets
+composer setup
 
-php artisan boost:install
+# Atur koneksi DB di .env (default MySQL Pos_db)
+# Jalankan migrasi jika belum
+php artisan migrate
+
+# (Opsional) Seed user demo
+php artisan db:seed
+
+# Buat symlink storage
+php artisan storage:link
 ```
 
-Boost provides your agent 15+ tools and skills that help agents build Laravel applications while following best practices.
+**Catatan:**
+- Jika menggunakan `SESSION_DRIVER=database`, buat tabel session: `php artisan session:table`
+- `composer setup` tidak menjalankan seeder
+- Hindari `migrate:fresh` jika ada data penting
 
-## Contributing
+## Menjalankan Aplikasi
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```bash
+# Development (server + queue + vite)
+composer dev
 
-## Code of Conduct
+# Atau terpisah
+php artisan serve
+npm run dev
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+Akses: `http://localhost:8000`
 
-## Security Vulnerabilities
+User demo (jika di-seed): `owner` / `kasir` dengan password `password`
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+## Testing & Formatting
 
-## License
+```bash
+# Jalankan semua test
+composer test
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+# Test spesifik
+php artisan test --filter=NamaTest
+php artisan test tests/Feature/NamaTest.php
+
+# Format kode
+vendor/bin/pint
+vendor/bin/pint --test
+```
+
+## Aturan Bisnis Penting
+
+- **Checkout**: Dalam 1 transaksi DB, lock baris shift/produk, `idempotency_key` unik, snapshot `sale_items` (`product_name`, `unit_price`, `unit_cost`, `line_total`), kurangi stok hanya sekali via `inventory_movements.source_key`. `track_stock=false` tidak mengurangi stok.
+- **Pembayaran**: Tunai langsung selesai. QRIS berstatus `pending`/`pending_payment` dan **tidak** dihitung sebagai pendapatan/stok sampai dikonfirmasi.
+- **Shift**: Harus dalam status `open` untuk menjual. Kas terduga = kas awal + penjualan tunai selesai − pengeluaran tunai − refund tunai ± mutasi kas.
+- **Laporan**: Hanya penjualan `completed` yang dihitung. Void/refund dilaporkan terpisah. Laba estimasi pakai snapshot cost.
+- **Penghapusan**: Tidak ada hard delete untuk user/produk/penjualan. Nonaktifkan via `is_active`. Hanya owner bisa void penjualan selesai.
+
+## Struktur Terkait
+
+- **Routes**: `routes/web.php` (web only)
+- **Services**: `app/Services/` (`CheckoutService`, `ShiftService`, `ActivityLogger`)
+- **Components**: Blade `x-*` di `resources/views/components/`
+- **Style**: Tailwind 4 + CSS kustom di `resources/css/`
+- **Sumber bisnis**: `PRD.md` (pedoman bisnis). Abaikan `README.md` default & `CLAUDE.md` jika ada perbedaan.
